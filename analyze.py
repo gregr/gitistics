@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # Copyright (c) 2012 Gregory L. Rosenblatt
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -17,8 +18,11 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
+from collections import defaultdict, namedtuple
+from math import sqrt
 import string
 from subprocess import Popen, PIPE
+import sys
 
 class Repr(object):
   def _repr(self): return ()
@@ -31,13 +35,15 @@ class FileMod(Repr):
     self.deletions = int(deletions)
   def _repr(self): return [self.fname, self.insertions, self.deletions]
 
+def sum_changes(objs, pred=lambda _: True):
+  return [sum(getattr(obj, attr) for obj in objs if pred(obj))
+          for attr in ('insertions', 'deletions')]
+
 class Commit(Repr):
   def __init__(self, fields):
     self.time, self.author, self.uid = fields[:3]
     self.fmods = map(FileMod, fields[3:])
-    self.insertions, self.deletions = [
-      sum(getattr(fmod, attr) for fmod in self.fmods)
-        for attr in ('insertions', 'deletions')]
+    self.insertions, self.deletions = sum_changes(self.fmods)
   def _repr(self):
     return [self.time, self.author, self.uid, self.insertions, self.deletions]
 
@@ -52,3 +58,63 @@ def commits(branch=None, merges=None, delimeter='BEGINCOMMIT'):
   out, _ = proc.communicate()
   blobs = map(string.strip, out.split(delimeter))[1:]
   return [Commit(filter(None, commit.split('\n'))) for commit in blobs]
+
+def by_author(cmts):
+  author_to_commits = defaultdict(list)
+  for commit in cmts: author_to_commits[commit.author].append(commit)
+  return author_to_commits
+
+Changes = namedtuple('Changes', 'insertions deletions')
+Stats = namedtuple('Stats', 'count total mean std')
+def compute_stats(attr, cmts, pred=lambda _, __: True):
+  xs = [getattr(commit, attr) for commit in cmts if pred(commit, attr)]
+  if not xs: return Stats(0, 0, 0, 0)
+  count = float(len(xs))
+  total = sum(xs)
+  mean = total / count
+  std = sqrt(sum((xx - mean)**2 for xx in xs) / count)
+  return Stats(count, total, mean, std)
+
+class CommitStats(Repr):
+  def __init__(self, cmts):
+    self.commits = cmts
+    # todo: ignore certain file formats?
+    self.changes = Changes(*[compute_stats(attr, cmts)
+      for attr in ('insertions', 'deletions')])
+    stdlimits = [1.96, 2.3263]
+    def significant(stdlimit):
+      def _significant(commit, attr):
+        stats = getattr(self.changes, attr)
+        xx = getattr(commit, attr)
+        var = abs(xx - stats.mean)
+        return var < stats.std * stdlimit
+      return _significant
+    self.sig_changes = [(stdlimit, Changes(*[compute_stats(attr, cmts, significant(stdlimit)) for attr in ('insertions', 'deletions')])) for stdlimit in (1.96, 2.3263)]
+  def _repr(self): return [self.changes, self.sig_changes]
+
+def author_stats():
+  return dict((author, CommitStats(cmts))
+              for author, cmts in by_author(commits()).iteritems())
+
+def print_cstats(cstats):
+  print 'all changes:'
+  print '   ', cstats.changes
+  print 'significant changes:'
+  for stdlimit, changes in cstats.sig_changes:
+    print '  stdev <=', stdlimit
+    print '   ', changes
+
+def main(argv):
+  all_stats = author_stats()
+  if len(argv) == 1:
+    print 'all author stats:'
+    for author, stats in all_stats.iteritems():
+      print
+      print author
+      print_cstats(stats)
+  else:
+    author = argv[1]
+    print author
+    print_cstats(all_stats.get(author, CommitStats(())))
+
+if __name__ == '__main__': main(sys.argv)

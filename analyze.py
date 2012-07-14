@@ -19,7 +19,10 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 from collections import defaultdict, namedtuple
-from math import sqrt
+from csv import writer
+import errno
+import math
+import os
 import string
 from subprocess import Popen, PIPE
 import sys
@@ -59,10 +62,22 @@ def commits(branch=None, merges=None, delimeter='BEGINCOMMIT'):
   blobs = map(string.strip, out.split(delimeter))[1:]
   return [Commit(filter(None, commit.split('\n'))) for commit in blobs]
 
+def write_csv(path, cmts):
+  csvf = writer(open(path, 'wb'))
+  for commit in cmts: csvf.writerow(commit._repr())
+
 def by_author(cmts):
   author_to_commits = defaultdict(list)
   for commit in cmts: author_to_commits[commit.author].append(commit)
   return author_to_commits
+
+def write_author_csvs(dirpath, author_commits=None):
+  try: os.makedirs(dirpath)
+  except OSError as e:
+    if e.errno != errno.EEXIST: raise
+  if author_commits is None: author_commits = by_author(commits()).items()
+  for author, cmts in author_commits:
+    write_csv(os.path.join(dirpath, author + '.csv'), cmts)
 
 Changes = namedtuple('Changes', 'insertions deletions')
 Stats = namedtuple('Stats', 'count total mean std')
@@ -72,7 +87,7 @@ def compute_stats(attr, cmts, pred=lambda _, __: True):
   count = float(len(xs))
   total = sum(xs)
   mean = total / count
-  std = sqrt(sum((xx - mean)**2 for xx in xs) / count)
+  std = math.sqrt(sum((xx - mean)**2 for xx in xs) / count)
   return Stats(count, total, mean, std)
 
 class CommitStats(Repr):

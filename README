@@ -1,0 +1,1 @@
+A simple utility for analyzing commits, particularly calculating significant lines of code changed.  Unusually large commits are filtered out, as they typically represent adding data files, external files, or generated code.

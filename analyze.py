@@ -49,19 +49,24 @@ class Commit(Repr):
     self.insertions, self.deletions = sum_changes(self.fmods)
   def _repr(self):
     return [self.time, self.author, self.uid, self.subject,
-            self.insertions, self.deletions]
+            self.insertions, self.deletions, int(self.is_merge)]
 
 def commits(branch=None, merges=None, delimeter='BEGINCOMMIT'):
+  cmts = []
   fmt = delimeter + '%n%at%n%an%n%H%n%s' # unixtime, author, hash, subject
-  cmd = ['git', 'log', '--format='+fmt, '--numstat']
-  if merges is not None:
-    if merges: cmd.append('--merges')
+  merge_choices = [True, False]
+  for is_merge in merge_choices:
+    cmd = ['git', 'log', '--format='+fmt, '--numstat']
+    if is_merge: cmd.append('--merges')
     else: cmd.append('--no-merges')
-  if branch is not None: cmd.append(branch)
-  proc = Popen(cmd, stdout=PIPE)
-  out, _ = proc.communicate()
-  blobs = map(string.strip, out.split(delimeter))[1:]
-  return [Commit(filter(None, commit.split('\n'))) for commit in blobs]
+    if branch is not None: cmd.append(branch)
+    proc = Popen(cmd, stdout=PIPE)
+    out, _ = proc.communicate()
+    blobs = map(string.strip, out.split(delimeter))[1:]
+    new_commits = [Commit(filter(None, commit.split('\n'))) for commit in blobs]
+    for commit in new_commits: commit.is_merge = is_merge
+    cmts.extend(new_commits)
+  return cmts
 
 def write_csv(path, cmts):
   csvf = writer(open(path, 'wb'))

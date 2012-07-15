@@ -43,14 +43,16 @@ def sum_changes(objs, pred=lambda _: True):
 
 class Commit(Repr):
   def __init__(self, fields):
-    self.time, self.author, self.uid = fields[:3]
-    self.fmods = filter(None, map(file_mod, fields[3:]))
+    non_fmod_count = 4
+    self.time, self.author, self.uid, self.subject = fields[:non_fmod_count]
+    self.fmods = filter(None, map(file_mod, fields[non_fmod_count:]))
     self.insertions, self.deletions = sum_changes(self.fmods)
   def _repr(self):
-    return [self.time, self.author, self.uid, self.insertions, self.deletions]
+    return [self.time, self.author, self.uid, self.subject,
+            self.insertions, self.deletions]
 
 def commits(branch=None, merges=None, delimeter='BEGINCOMMIT'):
-  fmt = delimeter + '%n%at%n%an%n%H' # unixtime, author, hash
+  fmt = delimeter + '%n%at%n%an%n%H%n%s' # unixtime, author, hash, subject
   cmd = ['git', 'log', '--format='+fmt, '--numstat']
   if merges is not None:
     if merges: cmd.append('--merges')

@@ -31,12 +31,11 @@ class Repr(object):
   def _repr(self): return ()
   def __repr__(self): return '%s(%s)' % (self.__class__.__name__, self._repr())
 
-class FileMod(Repr):
-  def __init__(self, line):
-    insertions, deletions, self.fname = line.split('\t')
-    self.insertions = int(insertions)
-    self.deletions = int(deletions)
-  def _repr(self): return [self.fname, self.insertions, self.deletions]
+FileMod = namedtuple('FileMod', 'fname insertions deletions')
+def file_mod(line):
+  insertions, deletions, fname = line.split('\t')
+  if '-' in (insertions, deletions): return None
+  return FileMod(fname, int(insertions), int(deletions))
 
 def sum_changes(objs, pred=lambda _: True):
   return [sum(getattr(obj, attr) for obj in objs if pred(obj))
@@ -45,7 +44,7 @@ def sum_changes(objs, pred=lambda _: True):
 class Commit(Repr):
   def __init__(self, fields):
     self.time, self.author, self.uid = fields[:3]
-    self.fmods = map(FileMod, fields[3:])
+    self.fmods = filter(None, map(file_mod, fields[3:]))
     self.insertions, self.deletions = sum_changes(self.fmods)
   def _repr(self):
     return [self.time, self.author, self.uid, self.insertions, self.deletions]

@@ -54,7 +54,8 @@ class Commit(Repr):
 def commits(branch=None, merges=None, delimeter='BEGINCOMMIT'):
   cmts = []
   fmt = delimeter + '%n%at%n%an%n%H%n%s' # unixtime, author, hash, subject
-  merge_choices = [True, False]
+  if merges is not None: merge_choices = [merges]
+  else: merge_choices = [True, False]
   for is_merge in merge_choices:
     cmd = ['git', 'log', '--format='+fmt, '--numstat']
     if is_merge: cmd.append('--merges')
